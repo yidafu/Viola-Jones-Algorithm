@@ -1,0 +1,284 @@
+package dev.yidafu.face.detection
+
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.withContext
+import org.jetbrains.kotlinx.multik.ndarray.data.D2Array
+import kotlin.math.*
+
+data class ThresholdPolarity(
+    val threshold: Float,
+    val polarity: Int,
+)
+
+data class ClassifierResult(
+    val threshold: Float,
+    val polarity: Int,
+    val classificationError: Float,
+    val classifier: Feature,
+)
+
+data class WeakClassifier(
+    val threshold: Float,
+    val polarity: Int,
+    val alpha: Float,
+    val classifier: Feature,
+)
+
+
+fun normalizeWeights(ws: List<Float>): List<Float> {
+    val sum = ws.sum()
+    return ws.map { it / sum }
+}
+
+/**
+ * 构建累积和数组，用于计算ROC曲线相关的统计数据
+ *
+ * @param ys 标签列表，其中小于等于0.5f的值被视为负类，大于0.5f的值被视为正类
+ * @param ws 权重列表，与标签列表一一对应，用于加权计算累积和
+ *
+ * @return 包含两组数据的Pair：
+ *         第一组(Pair<Float, MutableList<Float>>)：负类的总累积权重和累积过程列表
+ *         第二组(Pair<Float, MutableList<Float>>)：正类的总累积权重和累积过程列表
+ */
+fun buildRunningSums(
+    ys: List<Float>,
+    ws: List<Float>,
+): Pair<Pair<Float, MutableList<Float>>, Pair<Float, MutableList<Float>>> {
+    // 初始化变量
+    val sMinuses = mutableListOf<Float>() // 累积负类计数列表
+    val sPluses = mutableListOf<Float>()  // 累积正类计数列表
+    var sMinus = 0f // 当前累积负类计数
+    var sPlus = 0f  // 当前累积正类计数
+
+    // 遍历数据，根据标签值将权重累加到对应的类别中，并记录累积过程
+    for ((y, w) in ys.zip(ws)) {
+        if (y <= 0.5f) {
+            sMinus += w
+        } else {
+            sPlus += w
+        }
+
+        // 添加当前累积值到列表
+        sMinuses.add(sMinus)
+        sPluses.add(sPlus)
+    }
+    return Pair(
+        Pair(sMinus, sMinuses),
+        Pair(sPlus, sPluses)
+    )
+}
+
+/**
+ * 寻找最佳阈值函数
+ *
+ * 该函数通过遍历所有可能的阈值点，计算每个阈值点对应的分类错误率，
+ * 找到使错误率最小的最佳阈值及其极性。
+ *
+ * @param zs 阈值候选点列表
+ * @param totalMinus 负类样本的总权重
+ * @param totalPlus 正类样本的总权重
+ * @param sMinuses 累积负类权重列表，与zs对应位置对应
+ * @param sPluses 累积正类权重列表，与zs对应位置对应
+ * @return ThresholdPolarity 包含最佳阈值和极性的数据类
+ */
+fun findBestThreshold(
+    zs: List<Float>,
+    totalMinus: Float,
+    totalPlus: Float,
+    sMinuses: List<Float>,
+    sPluses: List<Float>,
+): ThresholdPolarity {
+    var minE = Float.MAX_VALUE
+    var minZ = 0f
+    var polarity = 0
+
+    // 遍历所有阈值候选点，计算对应的分类错误率
+    for ((z, sMinus, sPlus) in zs.zip(sMinuses, sPluses)) {
+        /**
+         *  当前位置，正类样本权重 + 错误分类的负类样本权重
+         *  即： 正确分类的负类样本权重 + (负类样本总权重 - 当前位置之前负类样本权重)
+         *
+         *  我们希望：
+         *  正确分类的负类样本权重 ==> 最多
+         *  错误分类的负类样本权重 ==> 最少
+         */
+        val error1 = sPlus + (totalMinus - sMinus)
+
+        /**
+         * 当前位置，负类样本权重 + 错误分类的正类样本权重
+         * 即：正确分类的负类样本权重 + (正类样本总权重 - 当前位置之前正样本权重)
+         *
+         *  我们希望：
+         * 正确分类的负类样本权重 ==> 最多
+         * 错误分类的正类样本权重 ==> 最少
+         */
+        val error2 = sMinus + (totalPlus  - sPlus)
+
+        // 更新最佳分类效果和对应的最佳阈值
+        if (error1 < minE) {
+            minE = error1
+            minZ = z
+            polarity = -1
+        } else if (error2 < minE) {
+            minE = error2
+            minZ = z
+            polarity = 1
+        }
+    }
+    // 在 minZ 上，正类样本的总权重和负类样本的总权重差值最小
+    return ThresholdPolarity(minZ, polarity)
+}
+
+
+fun determineThresholdPolarity(
+    zs: List<Float>,
+    ws: List<Float>,
+    ys: List<Float>,
+): ThresholdPolarity {
+    val (zsOrder, orderIndex) = zs.argsort()
+    val wsOrder = ws.reorder(orderIndex)
+    val ysOrder = ys.reorder(orderIndex)
+
+    val (minus, plus) = buildRunningSums(ysOrder, wsOrder)
+    val (tMinus, sMinuses) = minus
+    val (tPlus, sPluses) = plus
+    return findBestThreshold(
+        zsOrder,
+        tMinus,
+        tPlus,
+        sMinuses,
+        sPluses
+    )
+}
+/**
+ * 弱分类器函数，根据特征值与阈值的比较结果进行分类
+ *
+ * @param x 输入的二维数组数据
+ * @param f 特征对象，用于计算特征值
+ * @param polarity 极性参数，控制分类方向
+ * @param theta 阈值参数，用于比较判断
+ * @return 分类结果，返回0或1 0--负类 1--正类
+ */
+fun weekClassifier(x: D2Array<Float>, f: Feature, polarity: Int, theta: Float): Int {
+    /**
+     * 通过极性、阈值与特征值的差值符号来计算分类结果
+     * 先计算polarity * (theta - f.sum(x))的符号值(-1或1)
+     * 然后通过符号值加1再除以2，将结果映射到0或1
+     */
+   return ( polarity * (theta - f.sum(x)).sign.toInt() + 1) / 2
+}
+
+fun runWeekClassifier(x: D2Array<Float>, c: WeakClassifier): Int {
+    return weekClassifier(x, c.classifier, c.polarity, c.threshold)
+}
+
+fun applyFeature(
+    f: Feature,
+    xis: List<D2Array<Float>>,
+    ys: List<Float>,
+    ws: List<Float>,
+): ClassifierResult {
+    // 计算特征区域的特征值
+    val zs = xis.map {
+        f.sum(it)
+    }
+    // 找到最优预制和极性
+    val result = determineThresholdPolarity(zs, ws, ys)
+    var classificationError = 0f
+    for ((x, y, w) in xis.zip(ys, ws)) {
+        val h = weekClassifier(x, f, result.polarity, result.threshold)
+        // h y 相等 说明预测正确，否则分类错误
+        classificationError += w * abs(h - y)
+    }
+    return ClassifierResult(
+        result.threshold,
+        result.polarity,
+        classificationError,
+        f,
+    )
+}
+
+suspend fun buildWeakClassifiers(
+    prefix: String,
+    round: Int,
+    xis: List<D2Array<Float>>,
+    ys: List<Float>,
+    features: List<Feature>,
+    ws: List<Float>? = null,
+): Pair<MutableList<out Any>, MutableList<List<Float>>> = withContext(Dispatchers.Default) {
+    var locWs: MutableList<Float> = if (ws == null) {
+        val m = ys.count { it < .5 }
+        val l = ys.count { it >= .5 }
+
+        ys.map { y ->
+            if (y < .5) {
+                1.0f / (2.0f * m)
+            } else {
+                1.0f / (2.0f * l)
+            }
+        }
+    } else {
+        ws
+    }.toMutableList()
+
+    val wHistory = mutableListOf<List<Float>>(locWs)
+
+    val totalStartTime = System.currentTimeMillis()
+    val weakClassifiers = mutableListOf<WeakClassifier>()
+    // 按轮次训练弱分类器
+    (0..<round).map { t ->
+            // 目标：每一轮都找出最好的弱分类器
+            println("Building weak classifier ${t + 1}/${round} ...")
+            val startTime = System.currentTimeMillis()
+            locWs = normalizeWeights(locWs).toMutableList()
+            var best = ClassifierResult(
+                polarity = 0,
+                threshold = 0f,
+                classificationError = Float.MAX_VALUE,
+                classifier = Feature.Empty
+            )
+            // 需要每个特征对所有图片样本进行计算
+            features.mapIndexed { i, f ->
+                var improved = false
+                // 单个特征计算所有图片样本里的错误率
+                val result = applyFeature(f, xis, ys, locWs)
+                if (result.classificationError < best.classificationError) {
+                    improved = true
+                    best = result
+                }
+
+                if (improved) {
+                    val currentTime = System.currentTimeMillis()
+                    val totalDuration = currentTime - totalStartTime
+                    val duration = currentTime - startTime
+                    println("t=${t + 1}/${round} ${totalDuration / 1000}s (${duration / 1000}s in this stage) ${i + 1}/${features.size} ${100 * i / features.size}% evaluated. Classification error improved to ${best.classificationError} using ${best.classifier} ...")
+                }
+            }
+
+            val beta = best.classificationError / (1 - best.classificationError)
+            val alpha = ln(1f / beta);
+
+            val classifier = WeakClassifier(
+                threshold = best.threshold,
+                polarity = best.polarity,
+                classifier = best.classifier,
+                alpha = alpha
+            )
+            for ((i, pair) in xis.zip(ys).withIndex()) {
+                val (x, y) = pair
+                val h = runWeekClassifier(x, classifier)
+                val e = abs(h - y)
+                locWs[i] = locWs[i] * beta.toDouble().pow((1 - e).toDouble()).toFloat()
+            }
+            weakClassifiers.add(classifier)
+            wHistory.add(locWs.toList())
+    }
+//        saveClassifier(classifier, prefix, t, featureNum)
+
+    println("Done building $round weak classifiers.")
+
+
+    weakClassifiers to wHistory
+}

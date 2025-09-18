@@ -10,8 +10,8 @@ plugins {
     // Apply the org.jetbrains.kotlin.jvm Plugin to add support for Kotlin.
     alias(libs.plugins.jvm)
 
-    // Apply the java-library plugin for API and implementation separation.
-    `java-library`
+    // Apply the application plugin to create an executable JAR
+    application
 }
 
 repositories {
@@ -34,6 +34,8 @@ dependencies {
     implementation(libs.kandy.lets.plot)
     implementation(libs.dataframe)
     implementation(libs.kotlin.statistics)
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
+
 }
 
 testing {
@@ -44,6 +46,12 @@ testing {
 //            useKotlinTest("2.2.20")
         }
     }
+}
+
+// Configure the application
+application {
+    // Define the main class for the application.
+    mainClass.set("dev.yidafu.face.detection.MainKt")
 }
 
 // Apply a specific Java toolchain to ease working on different environments.

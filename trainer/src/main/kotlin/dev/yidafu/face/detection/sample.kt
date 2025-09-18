@@ -1,9 +1,5 @@
-package dev.yidafu.face.dectetion
+package dev.yidafu.face.detection
 
-import dev.yidafu.face.detection.mean
-import dev.yidafu.face.detection.sample
-import dev.yidafu.face.detection.std
-import dev.yidafu.face.detection.toD2Array
 import org.jetbrains.kotlinx.multik.api.mk
 import org.jetbrains.kotlinx.multik.api.ones
 import org.jetbrains.kotlinx.multik.api.zeros
@@ -23,7 +19,7 @@ fun sampleData(f: Int,
         xs.add(openFace(it, true).toD2Array())
     }
     bgImages.sample(b).forEach {
-        xs.add(openFace(it, true).toD2Array())
+        xs.add(openBackground(it, true).toD2Array())
     }
     val ones: D1Array<Float> = mk.ones<Float>(f, )  // 创建 p 个 1.0
     val zeros: D1Array<Float> = mk.zeros<Float>(b) // 创建 n 个 0.0

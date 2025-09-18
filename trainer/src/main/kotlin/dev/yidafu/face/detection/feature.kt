@@ -1,4 +1,4 @@
-package dev.yidafu.face.dectetion
+package dev.yidafu.face.detection
 
 import org.jetbrains.kotlinx.multik.ndarray.data.D2Array
 import org.jetbrains.kotlinx.multik.ndarray.data.get
@@ -25,11 +25,8 @@ abstract class Feature(
 
     companion object {
         val Empty: Feature = object :Feature(0, 0, 0, 0) {
-            override val coeffs: IntArray
-                get() = TODO("Not yet implemented")
-            override val coordList: List<Pair<Int, Int>>
-                get() = TODO("Not yet implemented")
-
+            override val coeffs: IntArray = IntArray(0)
+            override val coordList: List<Pair<Int, Int>> = listOf()
         }
     }
 
@@ -51,7 +48,7 @@ class Feature2h(
 //        右侧矩形：
 //        E(x+hw, y)      F(x+width, y)
 //        G(x+hw, y+height) H(x+width, y+height)
-    override val coordList = listOf<Pair<Int, Int>>(
+    override val coordList = listOf(
         x to y,
         x + halfWidth to y,
         x to y + height,
@@ -89,7 +86,6 @@ class Feature2v(
 
         x to y + halfHeight,
         x + width to y + halfHeight,
-
 
         x to y + halfHeight,
         x + width to y + halfHeight,
@@ -217,11 +213,10 @@ data class Location(
     val y: Int,
 )
 
-fun possiblePosition(size: Int, windowSize: Int): List<Int> {
-    return (0..(windowSize - size + 1)).toList()
+fun possiblePosition(size: Int, windowSize: Int): List<Int>{
+    return (0..(windowSize - size)).toList()
 }
-
-fun possibleLocations(size: Size, windowSize: Int = WINDOW_SIZE): List<Location> {
+fun possibleLocations(size: Size, windowSize: Int): List<Location> {
     val list = mutableListOf<Location>()
     possiblePosition(size.width, windowSize).forEach { x ->
         possiblePosition(size.height, windowSize).forEach { y ->
@@ -230,12 +225,10 @@ fun possibleLocations(size: Size, windowSize: Int = WINDOW_SIZE): List<Location>
     }
     return list
 }
-
-fun possibleShapes(size: Size, windowSize: Int= WINDOW_SIZE): List<Size> {
+fun possibleShapes(size: Size, windowSize: Int):List<Size> {
     val list = mutableListOf<Size>()
-    (0..(windowSize - size.width + 1) step size.width).forEach { w ->
-        (0..(windowSize - size.height + 1) step size.height).forEach { h ->
-            val shape = Size(w, h)
+    (size.width..(windowSize) step size.width).forEach { w ->
+        (size.height..(windowSize) step size.height).forEach { h ->
             list.add(Size(w, h))
         }
     }
@@ -244,34 +237,38 @@ fun possibleShapes(size: Size, windowSize: Int= WINDOW_SIZE): List<Size> {
 
 
 
-fun createFeatures(size: Size, block: (Location, Size) -> Feature): List<Feature> {
-    return possibleShapes(size, WINDOW_SIZE).map { shape ->
-        possibleLocations(shape, WINDOW_SIZE).map { loc ->
+fun createFeatures(size: Size, windowSize: Int, block: (Location, Size) -> Feature): List<Feature> {
+    return possibleShapes(size, windowSize).map { shape ->
+        possibleLocations(shape, windowSize).map { loc ->
             block(loc, shape)
         }
     }.flatten()
 }
 
 
-fun createAllFeatures(): List<Feature> {
-    val feature2v = createFeatures(Size(1, 2)) { loc, size ->
+fun createAllFeatures(windowSize: Int): List<Feature> {
+    val feature2v = createFeatures(Size(1, 2), windowSize) { loc, size ->
         Feature2v(loc.x, loc.y, size.width, size.height)
     }
-    val feature2h = createFeatures(Size(2, 1)) { loc, size ->
+    val feature2h = createFeatures(Size(2, 1), windowSize) { loc, size ->
         Feature2h(loc.x, loc.y, size.width, size.height)
     }
-    val feature3v = createFeatures(Size(1, 3)) { loc, size ->
+    val feature3v = createFeatures(Size(1, 3), windowSize) { loc, size ->
         Feature3v(loc.x, loc.y, size.width, size.height)
     }
 
-    val feature3h = createFeatures(Size(3, 1)) { loc, size ->
+    val feature3h = createFeatures(Size(3, 1), windowSize) { loc, size ->
         Feature3h(loc.x, loc.y, size.width, size.height)
     }
 
-    val feature4 = createFeatures(Size(2, 2)) { loc, size ->
+    val feature4 = createFeatures(Size(2, 2), windowSize) { loc, size ->
         Feature4(loc.x, loc.y, size.width, size.height)
     }
-
+    println("Feature2v count ${feature2v.size}")
+    println("Feature2h count ${feature2h.size}")
+    println("Feature3v count ${feature3v.size}")
+    println("Feature3h count ${feature3h.size}")
+    println("Feature4 count ${feature4.size}")
     val features = feature2v + feature2h + feature3v + feature3h + feature4
 
     return features

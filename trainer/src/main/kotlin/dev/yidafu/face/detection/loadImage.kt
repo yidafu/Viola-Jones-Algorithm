@@ -1,14 +1,5 @@
-package dev.yidafu.face.dectetion
+package dev.yidafu.face.detection
 
-import dev.yidafu.face.detection.OpenFileFunc
-import dev.yidafu.face.detection.crop
-import dev.yidafu.face.detection.fit
-import dev.yidafu.face.detection.gleam
-import dev.yidafu.face.detection.glob
-import dev.yidafu.face.detection.randomCrop
-import dev.yidafu.face.detection.scale
-import dev.yidafu.face.detection.toBufferedImage
-import dev.yidafu.face.detection.toD3Array
 import java.awt.image.BufferedImage
 import java.nio.file.Path
 import javax.imageio.ImageIO
@@ -35,7 +26,6 @@ val openFace: OpenFileFunc = { path, resize ->
 }
 
 
-
 val openBackground: OpenFileFunc = { path, resize ->
     val bgImg = ImageIO.read(path.toFile()).toD3Array().gleam().toBufferedImage()
     val croppedBgImg = bgImg.randomCrop(WINDOW_SIZE)
@@ -47,11 +37,11 @@ val openBackground: OpenFileFunc = { path, resize ->
     }
 }
 
-fun loadBackgroundImages(path: Path, resize: Boolean = true):List<BufferedImage> {
-   return loadImage(path).map { openBackground(it, resize) }
+fun loadBackgroundImages(path: Path, resize: Boolean = true): List<BufferedImage> {
+    return loadImage(path).map { openBackground(it, resize) }
 }
 
 
-fun loadFaceImages(path: Path, resize: Boolean= true): List<BufferedImage> {
+fun loadFaceImages(path: Path, resize: Boolean = true): List<BufferedImage> {
     return loadImage(path).map { openFace(it, resize) }
 }

@@ -1,17 +1,24 @@
-package dev.yidafu.face.dectetion
+package dev.yidafu.face.detection
 
-import dev.yidafu.face.detection.toIntegral
 import org.jetbrains.kotlinx.multik.ndarray.operations.toList
 import java.nio.file.Paths
 
 
-fun main() {
+suspend fun main() {
+    // 加载图像文件路径
+
     val backgroundImages = loadImage(Paths.get(BACKGROUND_IMAGE_DIR))
     val faceImages = loadImage(Paths.get(BACKGROUND_IMAGE_DIR))
 
     val (xs, ys) = sampleDataNormalized(100, 100, faceImages, backgroundImages)
     val xis = xs.map { it.toIntegral() }
 
-    val features = createAllFeatures()
-    val (weak_classifiers, w_history )= buildWeakClassifiers("1st", 2, xis, ys.toList(), features)
+    // 创建特征
+    val features = createAllFeatures(WINDOW_SIZE)
+    // 创建弱分类器
+    val (weakClassifiers, _) = buildWeakClassifiers("1st", 2, xis, ys.toList(), features)
+
+
+    // 输出结果
+    weakClassifiers.forEach { println(it) }
 }
