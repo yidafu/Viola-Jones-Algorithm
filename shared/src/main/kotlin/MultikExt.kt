@@ -75,7 +75,7 @@ inline fun  D3Array<Int>.gamma(coeff: Float = 2.2f): D3Array<Int> {
 @JvmName("D3ArrayFloatGamma")
 inline fun  D3Array<Float>.gamma(coeff: Float = 2.2f): D3Array<Float> {
     require(coeff > 0) { "Gamma coefficient must be positive" }
-    require(this.all { it > 0 }) { "Input values must be non-negative" }
+    require(this.all { it >= 0 }) { "Input values must be non-negative" }
     val indicator = 1 / coeff
     return this.map { it.pow(indicator) }
 }

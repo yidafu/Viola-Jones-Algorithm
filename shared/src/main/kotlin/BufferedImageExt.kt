@@ -36,10 +36,9 @@ fun BufferedImage.toD3Array(): D3Array<Int> {
             val g = (pixel shr 8) and 0xFF
             val b = pixel and 0xFF
 
-            // 归一化到 [0.0, 1.0] 并存入结果
-            d3array[y, x, 0] = r / 255
-            d3array[y, x, 1] = g / 255
-            d3array[y, x, 2] = b / 255
+            d3array[y, x, 0] = r
+            d3array[y, x, 1] = g
+            d3array[y, x, 2] = b
         }
     }
 
@@ -55,7 +54,7 @@ fun BufferedImage.toD2Array(): D2Array<Int> {
         for (x in 0 until width) {
             val pixel = this.getRGB(x, y);
             val b = pixel and 0xFF
-            d2array[y, x] = b / 255;
+            d2array[y, x] = b
         }
     }
     return d2array
