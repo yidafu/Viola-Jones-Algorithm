@@ -16,9 +16,10 @@ suspend fun main() {
     // 创建特征
     val features = createAllFeatures(WINDOW_SIZE)
     // 创建弱分类器
-    val (weakClassifiers, _) = buildWeakClassifiers("1st", 2, xis, ys.toList(), features)
+    val (weakClassifiers, wights) = buildWeakClassifiers("1st", 2, xis, ys.toList(), features)
 
 
     // 输出结果
+    wights.forEach { println(it.map { String.format("") }) }
     weakClassifiers.forEach { println(it) }
 }

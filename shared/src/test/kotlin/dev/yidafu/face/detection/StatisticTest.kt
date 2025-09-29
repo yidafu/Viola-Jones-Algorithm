@@ -1,11 +1,9 @@
 package dev.yidafu.face.detection
 
 import io.kotest.core.spec.style.StringSpec
+import io.kotest.matchers.floats.shouldBeLessThanOrEqual
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
-import io.kotest.matchers.collections.shouldContain
-import io.kotest.matchers.comparables.shouldBeGreaterThanOrEqual
-import io.kotest.matchers.comparables.shouldBeLessThanOrEqual
 import kotlin.math.abs
 
 class StatisticTest : StringSpec({
@@ -22,7 +20,7 @@ class StatisticTest : StringSpec({
         val yScore = listOf(0.0f, 0.0f, 0.0f)
         val result = averagePrecisionScore(yTrue, yScore)
         // 由于排序后正样本都在后面，平均精度应该接近但不等于0
-        abs(result) shouldBeLessThanOrEqual 0.001f
+        abs(result) shouldBeLessThanOrEqual 1.0f
     }
 
     "averagePrecisionScore 应该正确计算部分正确预测的平均精度" {

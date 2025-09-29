@@ -114,7 +114,7 @@ fun findBestThreshold(
          * 正确分类的负类样本权重 ==> 最多
          * 错误分类的正类样本权重 ==> 最少
          */
-        val error2 = sMinus + (totalPlus  - sPlus)
+        val error2 = sMinus + (totalPlus - sPlus)
 
         // 更新最佳分类效果和对应的最佳阈值
         if (error1 < minE) {
@@ -152,6 +152,7 @@ fun determineThresholdPolarity(
         sPluses
     )
 }
+
 /**
  * 弱分类器函数，根据特征值与阈值的比较结果进行分类
  *
@@ -167,7 +168,7 @@ fun weekClassifier(x: D2Array<Float>, f: Feature, polarity: Int, theta: Float): 
      * 先计算polarity * (theta - f.sum(x))的符号值(-1或1)
      * 然后通过符号值加1再除以2，将结果映射到0或1
      */
-   return ( polarity * (theta - f.sum(x)).sign.toInt() + 1) / 2
+    return (polarity * (theta - f.sum(x)).sign.toInt() + 1) / 2
 }
 
 fun runWeekClassifier(x: D2Array<Float>, c: WeakClassifier): Int {
@@ -227,53 +228,54 @@ suspend fun buildWeakClassifiers(
 
     val totalStartTime = System.currentTimeMillis()
     val weakClassifiers = mutableListOf<WeakClassifier>()
+
     // 按轮次训练弱分类器
     (0..<round).map { t ->
-            // 目标：每一轮都找出最好的弱分类器
-            println("Building weak classifier ${t + 1}/${round} ...")
-            val startTime = System.currentTimeMillis()
-            locWs = normalizeWeights(locWs).toMutableList()
-            var best = ClassifierResult(
-                polarity = 0,
-                threshold = 0f,
-                classificationError = Float.MAX_VALUE,
-                classifier = Feature.Empty
-            )
-            // 需要每个特征对所有图片样本进行计算
-            features.mapIndexed { i, f ->
-                var improved = false
-                // 单个特征计算所有图片样本里的错误率
-                val result = applyFeature(f, xis, ys, locWs)
-                if (result.classificationError < best.classificationError) {
-                    improved = true
-                    best = result
-                }
-
-                if (improved) {
-                    val currentTime = System.currentTimeMillis()
-                    val totalDuration = currentTime - totalStartTime
-                    val duration = currentTime - startTime
-                    println("t=${t + 1}/${round} ${totalDuration / 1000}s (${duration / 1000}s in this stage) ${i + 1}/${features.size} ${100 * i / features.size}% evaluated. Classification error improved to ${best.classificationError} using ${best.classifier} ...")
-                }
+        // 目标：每一轮都找出最好的弱分类器
+        println("Building weak classifier ${t + 1}/${round} ...")
+        val startTime = System.currentTimeMillis()
+        locWs = normalizeWeights(locWs).toMutableList()
+        var best = ClassifierResult(
+            polarity = 0,
+            threshold = 0f,
+            classificationError = Float.MAX_VALUE,
+            classifier = Feature.Empty
+        )
+        // 需要每个特征对所有图片样本进行计算
+        features.mapIndexed { i, f ->
+            var improved = false
+            // 单个特征计算所有图片样本里的错误率
+            val result = applyFeature(f, xis, ys, locWs)
+            if (result.classificationError < best.classificationError) {
+                improved = true
+                best = result
             }
 
-            val beta = best.classificationError / (1 - best.classificationError)
-            val alpha = ln(1f / beta);
-
-            val classifier = WeakClassifier(
-                threshold = best.threshold,
-                polarity = best.polarity,
-                classifier = best.classifier,
-                alpha = alpha
-            )
-            for ((i, pair) in xis.zip(ys).withIndex()) {
-                val (x, y) = pair
-                val h = runWeekClassifier(x, classifier)
-                val e = abs(h - y)
-                locWs[i] = locWs[i] * beta.toDouble().pow((1 - e).toDouble()).toFloat()
+            if (improved) {
+                val currentTime = System.currentTimeMillis()
+                val totalDuration = currentTime - totalStartTime
+                val duration = currentTime - startTime
+                println("t=${t + 1}/${round} ${totalDuration / 1000}s (${duration / 1000}s in this stage) ${i + 1}/${features.size} ${100 * i / features.size}% evaluated. Classification error improved to ${best.classificationError} using ${best.classifier} ...")
             }
-            weakClassifiers.add(classifier)
-            wHistory.add(locWs.toList())
+        }
+
+        val beta = best.classificationError / (1 - best.classificationError)
+        val alpha = ln(1f / beta)
+
+        val classifier = WeakClassifier(
+            threshold = best.threshold,
+            polarity = best.polarity,
+            classifier = best.classifier,
+            alpha = alpha
+        )
+        for ((i, pair) in xis.zip(ys).withIndex()) {
+            val (x, y) = pair
+            val h = runWeekClassifier(x, classifier)
+            val e = abs(h - y)
+            locWs[i] = locWs[i] * beta.toDouble().pow((1 - e).toDouble()).toFloat()
+        }
+        weakClassifiers.add(classifier)
+        wHistory.add(locWs.toList())
     }
 //        saveClassifier(classifier, prefix, t, featureNum)
 

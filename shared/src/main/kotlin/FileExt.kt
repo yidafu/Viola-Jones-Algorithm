@@ -10,6 +10,7 @@ import java.nio.file.PathMatcher
 import javax.imageio.ImageIO
 import kotlin.math.min
 import kotlin.random.Random
+import kotlin.streams.toList
 
 fun File.scale(tWidth: Int, tHeight: Int): BufferedImage {
     val sImg = ImageIO.read(this);
@@ -29,7 +30,7 @@ fun File.glob(pattern: String): List<Path> {
     // 遍历当前目录及其所有子目录，查找符合模式匹配规则的常规文件
     val files = Files.walk(this.toPath())
         .filter { Files.isRegularFile(it) && matcher.matches(it) }
-        .toList().filterNotNull();
+        .toList().filterNotNull()
     return files
 
 }
@@ -163,3 +164,4 @@ fun BufferedImage.randomCrop(minSize: Int): BufferedImage {
     // 执行裁剪操作
     return this.crop(x, y, cropSize, cropSize)
 }
+

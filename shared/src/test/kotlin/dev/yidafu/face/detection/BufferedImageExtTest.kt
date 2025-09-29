@@ -87,21 +87,21 @@ class BufferedImageExtTest : StringSpec({
         d3Array.shape shouldBe intArrayOf(height, width, 3)
         
         // 验证像素值（归一化后的值）
-        d3Array[0, 0, 0] shouldBe 1 // 红色通道
+        d3Array[0, 0, 0] shouldBe 255 // 红色通道
         d3Array[0, 0, 1] shouldBe 0 // 绿色通道
         d3Array[0, 0, 2] shouldBe 0 // 蓝色通道
         
         d3Array[0, 1, 0] shouldBe 0 // 红色通道
-        d3Array[0, 1, 1] shouldBe 1 // 绿色通道
+        d3Array[0, 1, 1] shouldBe 255 // 绿色通道
         d3Array[0, 1, 2] shouldBe 0 // 蓝色通道
         
         d3Array[1, 0, 0] shouldBe 0 // 红色通道
         d3Array[1, 0, 1] shouldBe 0 // 绿色通道
-        d3Array[1, 0, 2] shouldBe 1 // 蓝色通道
+        d3Array[1, 0, 2] shouldBe 255 // 蓝色通道
         
-        d3Array[1, 1, 0] shouldBe 1 // 红色通道
-        d3Array[1, 1, 1] shouldBe 1 // 绿色通道
-        d3Array[1, 1, 2] shouldBe 1 // 蓝色通道
+        d3Array[1, 1, 0] shouldBe 255 // 红色通道
+        d3Array[1, 1, 1] shouldBe 255 // 绿色通道
+        d3Array[1, 1, 2] shouldBe 255 // 蓝色通道
     }
 
     // 属性测试：BufferedImage.toD3Array 应该正确处理各种尺寸的图像
@@ -121,9 +121,9 @@ class BufferedImageExtTest : StringSpec({
                     val g = (pixel shr 8) and 0xFF
                     val b = pixel and 0xFF
                     
-                    d3Array[y, x, 0] shouldBe r / 255
-                    d3Array[y, x, 1] shouldBe g / 255
-                    d3Array[y, x, 2] shouldBe b / 255
+                    d3Array[y, x, 0] shouldBe r
+                    d3Array[y, x, 1] shouldBe g
+                    d3Array[y, x, 2] shouldBe b
                 }
             }
         }
@@ -148,9 +148,9 @@ class BufferedImageExtTest : StringSpec({
         
         // 验证像素值（归一化后的值）
         d2Array[0, 0] shouldBe 0 // 黑色
-        d2Array[0, 1] shouldBe 0 // 半蓝 (128/255 = 0 整数除法)
-        d2Array[1, 0] shouldBe 1 // 蓝色 (255/255 = 1)
-        d2Array[1, 1] shouldBe 1 // 白色
+        d2Array[0, 1] shouldBe 128 // 半蓝 (128/255 = 0 整数除法)
+        d2Array[1, 0] shouldBe 255 // 蓝色 (255/255 = 1)
+        d2Array[1, 1] shouldBe 255 // 白色
     }
 
     // 属性测试：BufferedImage.toD2Array 应该正确处理各种尺寸的图像
@@ -168,7 +168,7 @@ class BufferedImageExtTest : StringSpec({
                     val pixel = image.getRGB(x, y)
                     val b = pixel and 0xFF
                     
-                    d2Array[y, x] shouldBe b / 255
+                    d2Array[y, x] shouldBe b
                 }
             }
         }

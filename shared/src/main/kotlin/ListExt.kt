@@ -1,10 +1,18 @@
 package dev.yidafu.face.detection
 
+import kotlin.random.Random
+
 
 fun <T> List<T>.sample(n: Int): List<T> {
     require(n >= 0) { "Sample size must be non-negative" }
     require(n <= size) { "Sample size must not exceed list size" }
-    return shuffled().take(n)
+    if (n <= size) {
+        return shuffled().take(n)
+    }
+    return (0..<n).map {
+        val index = Random(1000).nextInt(0, size)
+        this[index]
+    }
 }
 
 fun <A, B, C> List<A>.zip(b: List<B>, c: List<C>): List<Triple<A, B, C>> {
