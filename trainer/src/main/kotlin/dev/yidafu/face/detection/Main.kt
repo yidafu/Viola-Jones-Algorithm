@@ -12,13 +12,15 @@ suspend fun main() {
     println("Loaded ${faceImages.size} face images")
     println("Loaded ${backgroundImages.size} background images")
 
-    // 使用较少样本以加快训练速度（用于测试代码生成）
-    val numPositive = minOf(500, faceImages.size)
-    val numNegative = minOf(500, backgroundImages.size)
+    // 使用足够的样本以确保训练质量
+    val numPositive = minOf(200, faceImages.size)
+    val numNegative = minOf(200, backgroundImages.size)
     println("Using $numPositive positive samples and $numNegative negative samples")
     
-    val (xs, ys) = sampleDataNormalized(numPositive, numNegative, faceImages, backgroundImages)
+    val (xs, ys, normParams) = sampleDataNormalized(numPositive, numNegative, faceImages, backgroundImages)
     val xis = xs.map { it.toIntegral() }
+    
+    println("Normalization parameters: mean=${normParams.mean}, std=${normParams.std}")
 
     // 创建特征
     val features = createAllFeatures(WINDOW_SIZE)
@@ -94,6 +96,8 @@ suspend fun main() {
     println("Output directory: ${classifierOutputDir.absolutePath}")
     ClassifierCodeGenerator.generateCascadeClassifier(
         cascade,
+        normParams.mean,
+        normParams.std,
         "dev.yidafu.face.detection.generated",
         classifierOutputDir
     )

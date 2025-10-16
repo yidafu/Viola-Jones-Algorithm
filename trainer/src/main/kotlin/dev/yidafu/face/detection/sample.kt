@@ -36,12 +36,17 @@ fun normalize(im: List<D2Array<Float>>, mean: Float , std: Float): List<D2Array<
 }
 
 
+data class NormalizationParams(
+    val mean: Float,
+    val std: Float
+)
+
 fun sampleDataNormalized(
     p: Int,
     n: Int,
     faceImages: List<Path>,
     bgImages: List<Path>,
-): Pair<List<D2Array<Float>>, D1Array<Float>> {
+): Triple<List<D2Array<Float>>, D1Array<Float>, NormalizationParams> {
     // 验证样本数量
     if (faceImages.size < p) {
         println("WARNING: Requested $p face samples but only ${faceImages.size} available")
@@ -80,5 +85,7 @@ fun sampleDataNormalized(
     println("Sample statistics: mean=${String.format("%.4f", sampleMean)}, std=${String.format("%.4f", safeStd)}")
     println("Positive samples: $actualP, Negative samples: $actualN")
     
-    return Pair(newXs, ys)
+    val normParams = NormalizationParams(sampleMean, safeStd)
+    
+    return Triple(newXs, ys, normParams)
 }
