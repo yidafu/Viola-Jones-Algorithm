@@ -18,6 +18,11 @@ abstract class Feature(
                 v * coeffs[i]
             }.sum()
     }
+    
+    // 为了兼容 classifier 模块，添加 compute 别名
+    fun compute(integralImage: D2Array<Float>): Float {
+        return sum(integralImage)
+    }
 
     override fun toString(): String {
         return "${this::class.simpleName}{x=$x,y=$y,width=$width,height=$height}"

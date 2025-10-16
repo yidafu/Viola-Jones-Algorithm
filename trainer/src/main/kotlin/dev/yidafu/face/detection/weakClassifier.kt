@@ -247,8 +247,13 @@ suspend fun buildWeakClassifiers(
         println("\nBuilding weak classifier ${t + 1}/${round} ...")
         val startTime = System.currentTimeMillis()
         locWs = normalizeWeights(locWs).toMutableList()
-        // 使用协程并行化特征评估
-        val chunkSize = 1500  // 每块 1500 个特征
+        
+        // 使用协程并行化特征评估 - 根据 CPU 核心数动态调整块大小
+        val availableProcessors = Runtime.getRuntime().availableProcessors()
+        // 更小的块大小以获得更好的并行性和提前终止效果
+        val chunkSize = kotlin.math.max(300, features.size / (availableProcessors * 8))
+        println("  Using $availableProcessors CPU cores, chunk size: $chunkSize")
+        
         val processedCount = AtomicInteger(0)
         val bestResult = AtomicReference(ClassifierResult(
             polarity = 0,
@@ -257,11 +262,26 @@ suspend fun buildWeakClassifiers(
             classifier = Feature.Empty
         ))
         
+        // 调整提前终止阈值，更激进的终止策略
+        val earlyStopThreshold = 0.01f  // 错误率低于5%时可以提前终止
+        
         // 需要每个特征对所有图片样本进行计算
         val allResults = features.chunked(chunkSize).mapIndexed { chunkIdx, chunk ->
             async(Dispatchers.Default) {
+                // 检查是否已找到足够好的分类器
+                if (bestResult.get().classificationError < earlyStopThreshold) {
+                    println("  Early stopping: found classifier with error < ${earlyStopThreshold}")
+                    return@async emptyList()
+                }
+                
                 chunk.mapIndexed { localIdx, f ->
                     val globalIdx = chunkIdx * chunkSize + localIdx
+                    
+                    // 定期检查是否可以提前终止
+                    if (localIdx % 100 == 0 && bestResult.get().classificationError < earlyStopThreshold) {
+                        return@mapIndexed null
+                    }
+                    
                     // 单个特征计算所有图片样本里的错误率
                     val result = applyFeature(f, xis, ys, locWs)
                     
@@ -275,7 +295,7 @@ suspend fun buildWeakClassifiers(
                     } while (!bestResult.compareAndSet(currentBest, result))
                     
                     result
-                }
+                }.filterNotNull()
             }
         }.awaitAll().flatten()
         
@@ -330,6 +350,16 @@ suspend fun buildWeakClassifiers(
             println("Beta: $beta, Alpha: $alpha")
             println("First 10 weights: ${locWs.take(10)}")
             break
+        }
+        
+        // 检查权重统计信息
+        val minWeight = locWs.minOrNull() ?: 0f
+        val maxWeight = locWs.maxOrNull() ?: 0f
+        val zeroWeights = locWs.count { it < 1e-10f }
+        
+        if (zeroWeights > locWs.size / 2) {
+            println("WARNING: More than 50% weights are near zero ($zeroWeights/${locWs.size})")
+            println("  Min weight: ${String.format("%.2e", minWeight)}, Max weight: ${String.format("%.2e", maxWeight)}")
         }
         
         weakClassifiers.add(classifier)
