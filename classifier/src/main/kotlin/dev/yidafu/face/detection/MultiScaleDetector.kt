@@ -96,8 +96,8 @@ object MultiScaleDetector {
         
         println("Total candidates before NMS: ${detections.size}")
         
-        // 非极大值抑制
-        val finalDetections = nonMaximumSuppression(detections, 0.3f)
+        // 非极大值抑制 - 使用更高的阈值以合并更多重叠框
+        val finalDetections = nonMaximumSuppression(detections, 0.5f)
         
         println("Final detections after NMS: ${finalDetections.size}")
         

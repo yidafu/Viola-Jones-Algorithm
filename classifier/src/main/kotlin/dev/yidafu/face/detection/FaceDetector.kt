@@ -1,5 +1,6 @@
 package dev.yidafu.face.detection
 
+import dev.yidafu.face.detection.generated.TrainedCascade
 import org.jetbrains.kotlinx.multik.ndarray.data.D2Array
 
 /**
@@ -15,11 +16,7 @@ object FaceDetector {
     fun detect(integralImage: D2Array<Float>): Boolean {
         // 动态加载训练好的分类器
         return try {
-            val trainedCascadeClass = Class.forName("dev.yidafu.face.detection.generated.TrainedCascade")
-            val instanceField = trainedCascadeClass.getDeclaredField("INSTANCE")
-            val instance = instanceField.get(null)
-            val detectMethod = trainedCascadeClass.getMethod("detectFace", D2Array::class.java)
-            detectMethod.invoke(instance, integralImage) as Boolean
+            TrainedCascade.detectFace(integralImage)
         } catch (e: ClassNotFoundException) {
             throw IllegalStateException(
                 "Cascade classifier not found. Please run the trainer module first to generate the classifier code.",
