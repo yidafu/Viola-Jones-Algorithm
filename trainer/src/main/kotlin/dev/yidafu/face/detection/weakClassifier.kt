@@ -5,6 +5,8 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.withContext
 import org.jetbrains.kotlinx.multik.ndarray.data.D2Array
+import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicReference
 import kotlin.math.*
 
 data class ThresholdPolarity(
@@ -29,6 +31,16 @@ data class WeakClassifier(
 
 fun normalizeWeights(ws: List<Float>): List<Float> {
     val sum = ws.sum()
+    
+    // 防止除以 0 或 NaN
+    if (sum.isNaN() || sum.isInfinite() || sum <= 0f) {
+        println("ERROR: Invalid weight sum: $sum")
+        println("First 10 weights: ${ws.take(10)}")
+        // 返回均匀分布作为后备方案
+        val uniformWeight = 1.0f / ws.size
+        return List(ws.size) { uniformWeight }
+    }
+    
     return ws.map { it / sum }
 }
 
@@ -191,7 +203,7 @@ fun applyFeature(
     for ((x, y, w) in xis.zip(ys, ws)) {
         val h = weekClassifier(x, f, result.polarity, result.threshold)
         // h y 相等 说明预测正确，否则分类错误
-        classificationError += w * abs(h - y)
+    classificationError += w * abs(h - y)
     }
     return ClassifierResult(
         result.threshold,
@@ -230,37 +242,72 @@ suspend fun buildWeakClassifiers(
     val weakClassifiers = mutableListOf<WeakClassifier>()
 
     // 按轮次训练弱分类器
-    (0..<round).map { t ->
+    for (t in 0..<round) {
         // 目标：每一轮都找出最好的弱分类器
-        println("Building weak classifier ${t + 1}/${round} ...")
+        println("\nBuilding weak classifier ${t + 1}/${round} ...")
         val startTime = System.currentTimeMillis()
         locWs = normalizeWeights(locWs).toMutableList()
-        var best = ClassifierResult(
+        // 使用协程并行化特征评估
+        val chunkSize = 1500  // 每块 1500 个特征
+        val processedCount = AtomicInteger(0)
+        val bestResult = AtomicReference(ClassifierResult(
             polarity = 0,
             threshold = 0f,
             classificationError = Float.MAX_VALUE,
             classifier = Feature.Empty
-        )
+        ))
+        
         // 需要每个特征对所有图片样本进行计算
-        features.mapIndexed { i, f ->
-            var improved = false
-            // 单个特征计算所有图片样本里的错误率
-            val result = applyFeature(f, xis, ys, locWs)
-            if (result.classificationError < best.classificationError) {
-                improved = true
-                best = result
+        val allResults = features.chunked(chunkSize).mapIndexed { chunkIdx, chunk ->
+            async(Dispatchers.Default) {
+                chunk.mapIndexed { localIdx, f ->
+                    val globalIdx = chunkIdx * chunkSize + localIdx
+                    // 单个特征计算所有图片样本里的错误率
+                    val result = applyFeature(f, xis, ys, locWs)
+                    
+                    // 原子性更新最佳结果
+                    var currentBest: ClassifierResult
+                    do {
+                        currentBest = bestResult.get()
+                        if (result.classificationError >= currentBest.classificationError) {
+                            break
+                        }
+                    } while (!bestResult.compareAndSet(currentBest, result))
+                    
+                    result
+                }
             }
+        }.awaitAll().flatten()
+        
+        val best = bestResult.get()
 
-            if (improved) {
-                val currentTime = System.currentTimeMillis()
-                val totalDuration = currentTime - totalStartTime
-                val duration = currentTime - startTime
-                println("t=${t + 1}/${round} ${totalDuration / 1000}s (${duration / 1000}s in this stage) ${i + 1}/${features.size} ${100 * i / features.size}% evaluated. Classification error improved to ${best.classificationError} using ${best.classifier} ...")
-            }
+        // 防止分类错误率为极端值（0.0 或 1.0）导致 NaN
+        val epsilon = 1e-10f
+        val clippedError = best.classificationError.coerceIn(epsilon, 1f - epsilon)
+        
+        // 检查分类错误率是否过高（>=0.5 表示比随机猜测还差）
+        if (clippedError >= 0.5f) {
+            println("WARNING: Classification error ${best.classificationError} >= 0.5, weak learner is worse than random guessing!")
+            println("Stopping training early at round ${t + 1}/${round}")
+            break
         }
-
-        val beta = best.classificationError / (1 - best.classificationError)
-        val alpha = ln(1f / beta)
+        
+        val beta = clippedError / (1f - clippedError)
+        var alpha = ln(1f / beta)
+        
+        // 对于接近完美的分类器，alpha 可能会非常大，我们需要限制其上限
+        val maxAlpha = 25f  // 设置合理的上限
+        if (alpha.isInfinite() || alpha > maxAlpha) {
+            println("Perfect or near-perfect classifier found! Classification error: ${best.classificationError}")
+            alpha = maxAlpha
+        }
+        
+        // 检查 beta 和 alpha 是否有效
+        if (beta.isNaN() || alpha.isNaN()) {
+            println("ERROR: Invalid beta ($beta) or alpha ($alpha) detected!")
+            println("Classification error: ${best.classificationError}, Clipped error: $clippedError")
+            break
+        }
 
         val classifier = WeakClassifier(
             threshold = best.threshold,
@@ -268,14 +315,35 @@ suspend fun buildWeakClassifiers(
             classifier = best.classifier,
             alpha = alpha
         )
+        
+        // 更新权重
         for ((i, pair) in xis.zip(ys).withIndex()) {
             val (x, y) = pair
             val h = runWeekClassifier(x, classifier)
             val e = abs(h - y)
             locWs[i] = locWs[i] * beta.toDouble().pow((1 - e).toDouble()).toFloat()
         }
+        
+        // 检查权重更新后是否出现 NaN 或 Inf
+        if (locWs.any { it.isNaN() || it.isInfinite() }) {
+            println("ERROR: NaN or Infinite weights detected after update!")
+            println("Beta: $beta, Alpha: $alpha")
+            println("First 10 weights: ${locWs.take(10)}")
+            break
+        }
+        
         weakClassifiers.add(classifier)
         wHistory.add(locWs.toList())
+        
+        // 输出本轮训练结果
+        val roundEndTime = System.currentTimeMillis()
+        val roundDuration = (roundEndTime - startTime) / 1000.0
+        val totalDuration = (roundEndTime - totalStartTime) / 1000.0
+        println("  → Best classifier: ${best.classifier}")
+        println("  → Classification error: ${String.format("%.6f", best.classificationError)}")
+        println("  → Alpha: ${String.format("%.4f", alpha)}, Beta: ${String.format("%.6f", beta)}")
+        println("  → Time: ${String.format("%.2f", roundDuration)}s (Total: ${String.format("%.2f", totalDuration)}s)")
+        println("=".repeat(80))
     }
 //        saveClassifier(classifier, prefix, t, featureNum)
 
