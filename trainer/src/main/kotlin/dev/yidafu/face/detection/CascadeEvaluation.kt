@@ -113,12 +113,15 @@ private fun evaluateStage(x: D2Array<Float>, stage: StageClassifier): Boolean {
 
 /**
  * 计算阶段分类器的阈值
+ * Viola-Jones 论文中推荐的阈值策略
  */
 fun calculateThreshold(
     classifiers: List<WeakClassifier>,
-    targetFalsePositiveRate: Float = 0.5f
+    targetFalsePositiveRate: Float = 0.3f  // 降低到30%，提升召回率
 ): Float {
     val totalAlpha = classifiers.sumOf { it.alpha.toDouble() }.toFloat()
+    // 根据阶段调整阈值倍数
+    // 早期阶段更宽松，后期阶段逐渐严格
     return totalAlpha * targetFalsePositiveRate
 }
 

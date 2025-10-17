@@ -60,14 +60,7 @@ fun sampleDataNormalized(
     
     val (xs, ys) = sampleData(actualP, actualN, faceImages, bgImages)
     
-    // 验证样本质量（检查是否有无效图像）
-    var invalidSamples = 0
     // 简化检查，避免类型问题
-    
-    if (invalidSamples > 0) {
-        println("WARNING: Found $invalidSamples invalid samples (all black/white or no variance)")
-    }
-    
     val sampleMean = xs.mean()
     val sampleStd = xs.std()
     

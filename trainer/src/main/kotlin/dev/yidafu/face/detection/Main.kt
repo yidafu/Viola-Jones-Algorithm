@@ -13,8 +13,8 @@ suspend fun main() {
     println("Loaded ${backgroundImages.size} background images")
 
     // 使用足够的样本以确保训练质量
-    val numPositive = minOf(200, faceImages.size)
-    val numNegative = minOf(200, backgroundImages.size)
+    val numPositive = minOf(1500, faceImages.size)  // 增加到1500
+    val numNegative = minOf(1500, backgroundImages.size)
     println("Using $numPositive positive samples and $numNegative negative samples")
     
     val (xs, ys, normParams) = sampleDataNormalized(numPositive, numNegative, faceImages, backgroundImages)
@@ -29,36 +29,36 @@ suspend fun main() {
     println("=== Viola-Jones Cascade Classifier Training ===")
     println("=".repeat(80))
     
-    // ===== 第一阶段：2个弱分类器 =====
-    println("\n=== Stage 1: Training 2 weak classifiers ===")
+    // ===== 第一阶段：3个弱分类器 =====
+    println("\n=== Stage 1: Training 3 weak classifiers ===")
     val (stage1Classifiers, stage1Weights) = buildWeakClassifiers(
-        "stage1", 2, xis, ys.toList(), features
+        "stage1", 3, xis, ys.toList(), features
     )
     @Suppress("UNCHECKED_CAST")
     val stage1List = stage1Classifiers as List<WeakClassifier>
-    val stage1Threshold = calculateThreshold(stage1List, 0.5f)
+    val stage1Threshold = calculateThreshold(stage1List, 0.45f)  // 45% - 提高召回率
     println("Stage 1 threshold: ${String.format("%.4f", stage1Threshold)}")
     
-    // ===== 第二阶段：10个弱分类器 =====
-    println("\n=== Stage 2: Training 10 weak classifiers ===")
+    // ===== 第二阶段：15个弱分类器 ====w
+    println("\n=== Stage 2: Training 15 weak classifiers ===")
     val (stage2Classifiers, stage2Weights) = buildWeakClassifiers(
-        "stage2", 10, xis, ys.toList(), features,
+        "stage2", 15, xis, ys.toList(), features,
         ws = stage1Weights.last()
     )
     @Suppress("UNCHECKED_CAST")
     val stage2List = stage2Classifiers as List<WeakClassifier>
-    val stage2Threshold = calculateThreshold(stage2List, 0.5f)
+    val stage2Threshold = calculateThreshold(stage2List, 0.55f)  // 55% - 平衡召回率和精确率
     println("Stage 2 threshold: ${String.format("%.4f", stage2Threshold)}")
     
-    // ===== 第三阶段：25个弱分类器 =====
-    println("\n=== Stage 3: Training 25 weak classifiers ===")
+    // ===== 第三阶段：30个弱分类器 =====
+    println("\n=== Stage 3: Training 30 weak classifiers ===")
     val (stage3Classifiers, stage3Weights) = buildWeakClassifiers(
-        "stage3", 25, xis, ys.toList(), features,
+        "stage3", 30, xis, ys.toList(), features,
         ws = stage2Weights.last()
     )
     @Suppress("UNCHECKED_CAST")
     val stage3List = stage3Classifiers as List<WeakClassifier>
-    val stage3Threshold = calculateThreshold(stage3List, 0.5f)
+    val stage3Threshold = calculateThreshold(stage3List, 0.7f)  // 70% - 最严格，精确筛选
     println("Stage 3 threshold: ${String.format("%.4f", stage3Threshold)}")
     
     // ===== 构建级联分类器 =====
@@ -94,6 +94,7 @@ suspend fun main() {
     val classifierOutputDir = projectRoot.resolve("classifier/src/main/kotlin")
     
     println("Output directory: ${classifierOutputDir.absolutePath}")
+    println("Note: Normalization params (mean=${normParams.mean}, std=${normParams.std}) must be applied before detection")
     ClassifierCodeGenerator.generateCascadeClassifier(
         cascade,
         normParams.mean,

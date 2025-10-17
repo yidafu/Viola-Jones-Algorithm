@@ -262,25 +262,11 @@ suspend fun buildWeakClassifiers(
             classifier = Feature.Empty
         ))
         
-        // 调整提前终止阈值，更激进的终止策略
-        val earlyStopThreshold = 0.01f  // 错误率低于5%时可以提前终止
-        
         // 需要每个特征对所有图片样本进行计算
         val allResults = features.chunked(chunkSize).mapIndexed { chunkIdx, chunk ->
             async(Dispatchers.Default) {
-                // 检查是否已找到足够好的分类器
-                if (bestResult.get().classificationError < earlyStopThreshold) {
-                    println("  Early stopping: found classifier with error < ${earlyStopThreshold}")
-                    return@async emptyList()
-                }
-                
                 chunk.mapIndexed { localIdx, f ->
                     val globalIdx = chunkIdx * chunkSize + localIdx
-                    
-                    // 定期检查是否可以提前终止
-                    if (localIdx % 100 == 0 && bestResult.get().classificationError < earlyStopThreshold) {
-                        return@mapIndexed null
-                    }
                     
                     // 单个特征计算所有图片样本里的错误率
                     val result = applyFeature(f, xis, ys, locWs)
