@@ -31,18 +31,7 @@ object ImageUtils {
     fun saveImage(image: BufferedImage, file: File, format: String = "jpg") {
         ImageIO.write(image, format, file)
     }
-    
-    /**
-     * 转换为灰度图
-     */
-    fun toGrayscale(image: BufferedImage): BufferedImage {
-        val gray = BufferedImage(image.width, image.height, BufferedImage.TYPE_BYTE_GRAY)
-        val g = gray.createGraphics()
-        g.drawImage(image, 0, 0, null)
-        g.dispose()
-        return gray
-    }
-    
+
     /**
      * BufferedImage 转换为 D2Array<Float>
      */
@@ -61,6 +50,32 @@ object ImageUtils {
         }
         
         return mk.ndarray(data, height, width)
+    }
+    
+    /**
+     * 归一化图像数组
+     * @param image 原始图像数组
+     * @param mean 训练数据的均值
+     * @param std 训练数据的标准差
+     * @return 归一化后的图像数组
+     */
+    fun normalize(
+        image: D2Array<Float>,
+        mean: Float,
+        std: Float
+    ): D2Array<Float> {
+        val height = image.shape[0]
+        val width = image.shape[1]
+        val normalized = FloatArray(height * width)
+        
+        for (y in 0 until height) {
+            for (x in 0 until width) {
+                val idx = y * width + x
+                normalized[idx] = (image[y, x] - mean) / std
+            }
+        }
+        
+        return mk.ndarray(normalized, height, width)
     }
     
     /**
